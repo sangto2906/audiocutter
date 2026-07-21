@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: './', // Allow relative deployment on GitHub Pages
+  base: '/audiocutter/', // Use absolute repo path to prevent trailing slash issues on GitHub Pages
   plugins: [react(), tailwindcss()],
   server: {
     headers: {

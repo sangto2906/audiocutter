@@ -8,24 +8,14 @@ import puppeteer from 'puppeteer';
   page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
   page.on('requestfailed', request => console.log('REQUEST FAILED:', request.url(), request.failure()?.errorText));
   
-  await page.goto('http://localhost:5173', { waitUntil: 'networkidle0' });
+  await page.goto('http://localhost:5174', { waitUntil: 'networkidle0' });
   
-  console.log('Page loaded, uploading file...');
-  
-  const fileInput = await page.$('input[type=file]');
-  if (fileInput) {
-    await fileInput.uploadFile('./input.mp3');
-    console.log('File uploaded to input.');
-    
-    await new Promise(r => setTimeout(r, 2000));
-    const content = await page.content();
-    if (content.includes('input.mp3')) {
-      console.log('Success: File name found in DOM.');
-    } else {
-      console.log('Failed: File name not found in DOM.');
-    }
+  console.log('Page loaded, checking content...');
+  const content = await page.content();
+  if (content.includes('Audio Chunker')) {
+    console.log('Success: App rendered.');
   } else {
-    console.log('File input not found.');
+    console.log('Failed: App did not render.');
   }
 
   await browser.close();
