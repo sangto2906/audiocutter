@@ -47,6 +47,7 @@ export const useFFmpeg = () => {
     if (!file || !metadata) throw new Error("No file");
     const ffmpeg = ffmpegRef.current;
     
+    setIsProcessing(true);
     setStatusText(`Processing chunk ${chunk.index}...`);
     setProgress(0);
     
@@ -82,6 +83,12 @@ export const useFFmpeg = () => {
     await ffmpeg.exec(args);
 
     const data = await ffmpeg.readFile(outputName);
+    
+    // Clean up
+    await ffmpeg.deleteFile(outputName);
+    setIsProcessing(false);
+    setStatusText('');
+    
     return new Blob([(data as any).buffer || data], { type: `audio/${outputFormat}` });
   };
 
@@ -176,5 +183,6 @@ export const useFFmpeg = () => {
     statusText,
     processChunk,
     processAndDownloadMultiple,
+    downloadBlobLocal,
   };
 };

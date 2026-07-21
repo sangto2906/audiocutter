@@ -6,7 +6,7 @@ import { useFFmpeg } from '../hooks/useFFmpeg';
 
 export const ChunkTable = () => {
   const { chunks, fileUrl, outputFormat } = useAudioStore();
-  const { isLoaded, isProcessing, progress, statusText, processChunk, processAndDownloadMultiple } = useFFmpeg();
+  const { isLoaded, isProcessing, progress, statusText, processChunk, processAndDownloadMultiple, downloadBlobLocal } = useFFmpeg();
   
   const [playingChunk, setPlayingChunk] = useState<number | null>(null);
   const [selectedChunks, setSelectedChunks] = useState<Set<number>>(new Set());
@@ -76,12 +76,8 @@ export const ChunkTable = () => {
   const downloadSingle = async (chunk: typeof chunks[0]) => {
     try {
       const blob = await processChunk(chunk);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `output_${chunk.index.toString().padStart(3, '0')}.${outputFormat}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `output_${chunk.index.toString().padStart(3, '0')}.${outputFormat}`;
+      downloadBlobLocal(blob, filename);
     } catch (err) {
       console.error(err);
       alert('Failed to process chunk');
