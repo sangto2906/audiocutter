@@ -3,11 +3,14 @@ import { FileUploader } from './components/FileUploader';
 import { Waveform } from './components/Waveform';
 import { ChunkSettings } from './components/ChunkSettings';
 import { ChunkTable } from './components/ChunkTable';
+import { ZwnjInjector } from './components/ZwnjInjector';
 import { formatFileSize, formatTime } from './utils/audio';
-import { Scissors, XCircle } from 'lucide-react';
+import { Scissors, XCircle, Type, AudioLines } from 'lucide-react';
+import { useState } from 'react';
 
 function App() {
   const { file, metadata, reset } = useAudioStore();
+  const [activeTab, setActiveTab] = useState<'audio' | 'zwnj'>('audio');
 
   return (
     <div className="min-h-screen flex flex-col p-6">
@@ -19,14 +22,34 @@ function App() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Audio Chunker</h1>
         </div>
+        
+        <div className="flex bg-black/20 p-1 rounded-xl border border-white/5">
+          <button 
+            onClick={() => setActiveTab('audio')}
+            className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'audio' ? 'bg-cyan-500 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <AudioLines size={16} className="mr-2" /> Audio Chunker
+          </button>
+          <button 
+            onClick={() => setActiveTab('zwnj')}
+            className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'zwnj' ? 'bg-cyan-500 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Type size={16} className="mr-2" /> ZWNJ Injector
+          </button>
+        </div>
       </header>
 
       <main className="flex-grow flex flex-col max-w-6xl w-full mx-auto">
-        {!file ? (
-          <div className="flex-grow flex items-center justify-center">
-            <FileUploader />
-          </div>
-        ) : (
+        {activeTab === 'audio' ? (
+          !file ? (
+            <div className="flex-grow flex items-center justify-center">
+              <FileUploader />
+            </div>
+          ) : (
           <div className="flex flex-col animate-fade-in">
             {/* File Info Header */}
             <div className="flex justify-between items-end mb-6 glass-panel rounded-2xl p-6">
@@ -55,6 +78,9 @@ function App() {
               <ChunkTable />
             </div>
           </div>
+          )
+        ) : (
+          <ZwnjInjector />
         )}
       </main>
       
