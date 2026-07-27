@@ -86,7 +86,9 @@ export const ChunkTable = () => {
 
   const downloadSelected = (asZip: boolean) => {
     const toProcess = chunks.filter(c => selectedChunks.has(c.index));
-    processAndDownloadMultiple(toProcess, asZip);
+    // Browsers can block multiple programmatic downloads. Always use one ZIP
+    // when more than one chunk is selected; a single chunk remains a direct download.
+    processAndDownloadMultiple(toProcess, asZip || toProcess.length > 1);
   };
 
   const downloadAll = (asZip: boolean) => {
@@ -95,6 +97,11 @@ export const ChunkTable = () => {
 
   return (
     <div className="w-full glass-panel rounded-2xl p-6 mt-6 overflow-hidden">
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200" role="alert">
+          <strong>Download error:</strong> {loadError}
+        </div>
+      )}
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-xl font-bold tracking-tight">Generated Chunks <span className="text-cyan-400">({chunks.length})</span></h3>
         
@@ -118,7 +125,7 @@ export const ChunkTable = () => {
                 onClick={() => downloadSelected(false)}
                 disabled={selectedChunks.size === 0 || isProcessing}
               >
-                Download Selected
+                {selectedChunks.size > 1 ? 'Download Selected as ZIP' : 'Download Selected'}
               </button>
               <button 
                 className="px-4 py-2 bg-black/40 border border-white/10 hover:border-white/30 hover:bg-white/5 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
