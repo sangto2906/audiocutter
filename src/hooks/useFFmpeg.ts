@@ -11,7 +11,21 @@ const CORE_CDNS = [
   'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm',
 ];
 
+const LOAD_TIMEOUT_MS = 45_000;
+const EXEC_TIMEOUT_MS = 10 * 60_000;
+
 const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+const isMemoryError = (error: unknown) => /memory|out of bounds|runtimeerror|terminated/i.test(toErrorMessage(error));
+
+const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, message: string) => {
+  let timer: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) window.clearTimeout(timer);
+  });
+};
 
 export const useFFmpeg = () => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -47,19 +61,23 @@ export const useFFmpeg = () => {
 
     const promise = (async () => {
       for (const baseURL of CORE_CDNS) {
+        const ffmpeg = createFFmpeg();
         try {
-          const ffmpeg = createFFmpeg();
-          await ffmpeg.load({
-            coreURL: await toBlobURL(baseURL + '/ffmpeg-core.js', 'text/javascript'),
-            wasmURL: await toBlobURL(baseURL + '/ffmpeg-core.wasm', 'application/wasm'),
-          });
+          await withTimeout(
+            ffmpeg.load({
+              coreURL: await toBlobURL(baseURL + '/ffmpeg-core.js', 'text/javascript'),
+              wasmURL: await toBlobURL(baseURL + '/ffmpeg-core.wasm', 'application/wasm'),
+            }),
+            LOAD_TIMEOUT_MS,
+            'FFmpeg loading timed out. Check your browser or network connection.',
+          );
           loadedRef.current = true;
           setIsLoaded(true);
           setStatusText('');
           return;
         } catch (error) {
           console.warn('FFmpeg core failed to load from', baseURL, error);
-          ffmpegRef.current?.terminate();
+          ffmpeg.terminate();
           ffmpegRef.current = null;
           loadedRef.current = false;
         }
@@ -108,7 +126,7 @@ export const useFFmpeg = () => {
         try {
           await ffmpeg.deleteFile(inputNameRef.current);
         } catch {
-          // The previous engine may already have been terminated.
+          // Best effort cleanup.
         }
       }
       await ffmpeg.writeFile(inputName, await fetchFile(file));
@@ -120,9 +138,10 @@ export const useFFmpeg = () => {
 
   const makeArgs = (inputName: string, chunk: Chunk, outputName: string) => [
     '-hide_banner', '-loglevel', 'error', '-y',
+    '-ss', chunk.start.toFixed(6),
+    '-accurate_seek',
     '-i', inputName,
     '-map', '0:a:0', '-vn', '-sn', '-dn',
-    '-ss', chunk.start.toFixed(6),
     '-t', chunk.duration.toFixed(6),
     '-avoid_negative_ts', 'make_zero',
     '-threads', '1',
@@ -140,6 +159,20 @@ export const useFFmpeg = () => {
     });
   };
 
+  const executeChunk = async (ffmpeg: FFmpeg, args: string[]) => {
+    try {
+      return await withTimeout(
+        ffmpeg.exec(args),
+        EXEC_TIMEOUT_MS,
+        'FFmpeg processing timed out. The file may be too large for this browser.',
+      );
+    } catch (error) {
+      // A timed-out or crashed worker must not be reused.
+      ffmpeg.terminate();
+      throw error;
+    }
+  };
+
   const processChunk = async (chunk: Chunk): Promise<Blob> => {
     if (!metadata) throw new Error('No audio metadata');
     await load();
@@ -153,7 +186,7 @@ export const useFFmpeg = () => {
 
     try {
       const inputName = await ensureInput(ffmpeg);
-      await ffmpeg.exec(makeArgs(inputName, chunk, outputName));
+      await executeChunk(ffmpeg, makeArgs(inputName, chunk, outputName));
       return await readBlob(ffmpeg, outputName);
     } finally {
       try {
@@ -191,18 +224,32 @@ export const useFFmpeg = () => {
     const blobs: { name: string; blob: Blob }[] = [];
 
     try {
+      const inputName = await ensureInput(ffmpeg);
+
       for (let i = 0; i < chunksToProcess.length; i++) {
         const chunk = chunksToProcess[i];
         if (!chunk) continue;
 
         setStatusText('Processing chunk ' + chunk.index + ' / ' + chunksToProcess.length);
         setProgress(0);
-
-        const inputName = await ensureInput(ffmpeg);
         const outputName = 'output_' + chunk.index + '.' + outputFormat;
 
         try {
-          await ffmpeg.exec(makeArgs(inputName, chunk, outputName));
+          try {
+            await executeChunk(ffmpeg, makeArgs(inputName, chunk, outputName));
+          } catch (error) {
+            if (!isMemoryError(error)) throw error;
+
+            // The WASM heap can become corrupted after a memory fault.
+            // Restart once and retry the same chunk on a clean worker.
+            setStatusText('Restarting FFmpeg memory...');
+            await restartEngine();
+            ffmpeg = ffmpegRef.current;
+            if (!ffmpeg) throw new Error('FFmpeg could not be restarted');
+            const retryInputName = await ensureInput(ffmpeg);
+            await executeChunk(ffmpeg, makeArgs(retryInputName, chunk, outputName));
+          }
+
           const blob = await readBlob(ffmpeg, outputName);
           blobs.push({
             name: generateFileName(metadata.filename, chunk.index, outputFormat),
@@ -214,13 +261,6 @@ export const useFFmpeg = () => {
           } catch {
             // Best effort cleanup.
           }
-        }
-
-        // A fresh worker resets the WASM heap before the next chunk.
-        if (i < chunksToProcess.length - 1) {
-          await restartEngine();
-          ffmpeg = ffmpegRef.current;
-          if (!ffmpeg) throw new Error('FFmpeg could not be restarted');
         }
       }
 
