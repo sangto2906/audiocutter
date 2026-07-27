@@ -5,7 +5,7 @@ import { ChunkSettings } from './components/ChunkSettings';
 import { ChunkTable } from './components/ChunkTable';
 import { ZwnjInjector } from './components/ZwnjInjector';
 import { formatFileSize, formatTime } from './utils/audio';
-import { Scissors, XCircle, Type, AudioLines } from 'lucide-react';
+import { Scissors, XCircle, Type, AudioLines, Clock3, HardDrive } from 'lucide-react';
 import { useState } from 'react';
 
 function App() {
@@ -56,10 +56,10 @@ function App() {
               <div>
                 <h2 className="text-2xl font-semibold mb-2">{metadata?.filename}</h2>
                 <div className="flex space-x-6 text-sm font-mono text-gray-400">
-                  <span className="flex items-center"><span className="text-daw-primary mr-2">Ã¢ÂÂ±</span>{formatTime(metadata?.duration || 0)}</span>
-                  {metadata?.sampleRate && <span className="flex items-center"><span className="text-daw-primary mr-2">Rate</span>{metadata.sampleRate} Hz</span>}
-                  {metadata?.channels && <span className="flex items-center"><span className="text-daw-primary mr-2">Audio</span>{metadata.channels} Ch</span>}
-                  <span className="flex items-center"><span className="text-daw-primary mr-2">Ã°Å¸â€™Â¾</span>{formatFileSize(metadata?.fileSize || 0)}</span>
+                  <span className="flex items-center"><Clock3 size={15} className="text-daw-primary mr-2" />Duration: {formatTime(metadata?.duration || 0)}</span>
+                  {metadata?.sampleRate && <span className="flex items-center">Sample rate: {metadata.sampleRate} Hz</span>}
+                  {metadata?.channels && <span className="flex items-center">Channels: {metadata.channels}</span>}
+                  <span className="flex items-center"><HardDrive size={15} className="text-daw-primary mr-2" />File size: {formatFileSize(metadata?.fileSize || 0)}</span>
                 </div>
               </div>
               <button 

@@ -23,6 +23,7 @@ export const useFFmpeg = () => {
   const ffmpegRef = useRef<FFmpeg | null>(null);
   const loadPromiseRef = useRef<Promise<void> | null>(null);
   const inputNameRef = useRef<string | null>(null);
+  const inputFileRef = useRef<File | null>(null);
   const { file, outputFormat, metadata } = useAudioStore();
 
   const createFFmpeg = useCallback(() => {
@@ -56,7 +57,7 @@ export const useFFmpeg = () => {
           ffmpegRef.current = null;
         }
       }
-      throw new Error('KhÃƒÂ´ng thÃ¡Â»Æ’ tÃ¡ÂºÂ£i bÃ¡Â»â„¢ xÃ¡Â»Â­ lÃƒÂ½ FFmpeg. HÃƒÂ£y kiÃ¡Â»Æ’m tra mÃ¡ÂºÂ¡ng hoÃ¡ÂºÂ·c tÃ¡ÂºÂ¯t extension chÃ¡ÂºÂ·n CDN.');
+      throw new Error('Unable to load FFmpeg. Check your connection or disable extensions that block CDN requests.');
     })();
 
     loadPromiseRef.current = promise;
@@ -77,12 +78,13 @@ export const useFFmpeg = () => {
     if (!file) throw new Error('No audio file selected');
     const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.audio';
     const inputName = 'input' + extension.toLowerCase();
-    if (inputNameRef.current !== inputName) {
+    if (inputNameRef.current !== inputName || inputFileRef.current !== file) {
       if (inputNameRef.current) {
         try { await ffmpeg.deleteFile(inputNameRef.current); } catch { /* already removed */ }
       }
       await ffmpeg.writeFile(inputName, await fetchFile(file));
       inputNameRef.current = inputName;
+      inputFileRef.current = file;
     }
     return inputName;
   };
@@ -165,7 +167,11 @@ export const useFFmpeg = () => {
         downloadBlobLocal(zipBlob, generateFileName(metadata.filename, 0, 'zip').replace('_000', ''));
       } else {
         setStatusText('Downloading...');
-        for (const item of blobs) downloadBlobLocal(item.blob, item.name);
+        for (const [index, item] of blobs.entries()) {
+          downloadBlobLocal(item.blob, item.name);
+          // A short gap prevents browsers from blocking subsequent downloads.
+          if (index < blobs.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 350));
+        }
       }
       setStatusText('Done!');
       window.setTimeout(() => setStatusText(''), 3000);
