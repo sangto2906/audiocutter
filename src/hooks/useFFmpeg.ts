@@ -7,8 +7,8 @@ import { generateFileName } from '../utils/audio';
 import type { Chunk } from '../types';
 
 const CORE_CDNS = [
-  'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm',
-  'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm',
+  'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm',
+  'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm',
 ];
 
 const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -96,6 +96,7 @@ export const useFFmpeg = () => {
     '-ss', chunk.start.toFixed(6),
     '-t', chunk.duration.toFixed(6),
     '-avoid_negative_ts', 'make_zero',
+    '-threads', '1',
     ...(outputFormat === 'mp3'
       ? ['-c:a', 'libmp3lame', '-q:a', '2']
       : ['-c:a', 'pcm_s16le']),
