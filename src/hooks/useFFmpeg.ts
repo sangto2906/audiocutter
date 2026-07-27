@@ -66,8 +66,8 @@ export const useFFmpeg = () => {
     const duration = chunk.duration.toString();
 
     let args = [
-      '-ss', start,
       '-i', inputName,
+      '-ss', start,
       '-t', duration,
     ];
 
@@ -115,8 +115,8 @@ export const useFFmpeg = () => {
         const duration = chunk.duration.toString();
 
         let args = [
-          '-ss', start,
           '-i', inputName,
+          '-ss', start,
           '-t', duration,
         ];
 
@@ -171,9 +171,16 @@ export const useFFmpeg = () => {
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    
+    // Use a slight delay to ensure browser processes the click before removal/revoking
+    // This dramatically improves compatibility with Safari and mobile browsers
+    requestAnimationFrame(() => {
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 2000);
+    });
   };
 
   return {
