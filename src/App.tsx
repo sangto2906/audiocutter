@@ -56,10 +56,10 @@ function App() {
               <div>
                 <h2 className="text-2xl font-semibold mb-2">{metadata?.filename}</h2>
                 <div className="flex space-x-6 text-sm font-mono text-gray-400">
-                  <span className="flex items-center"><span className="text-daw-primary mr-2">⏱</span>{formatTime(metadata?.duration || 0)}</span>
-                  <span className="flex items-center"><span className="text-daw-primary mr-2">🎛</span>{metadata?.sampleRate} Hz</span>
-                  <span className="flex items-center"><span className="text-daw-primary mr-2">🔊</span>{metadata?.channels} Ch</span>
-                  <span className="flex items-center"><span className="text-daw-primary mr-2">💾</span>{formatFileSize(metadata?.fileSize || 0)}</span>
+                  <span className="flex items-center"><span className="text-daw-primary mr-2">Ã¢ÂÂ±</span>{formatTime(metadata?.duration || 0)}</span>
+                  {metadata?.sampleRate && <span className="flex items-center"><span className="text-daw-primary mr-2">Rate</span>{metadata.sampleRate} Hz</span>}
+                  {metadata?.channels && <span className="flex items-center"><span className="text-daw-primary mr-2">Audio</span>{metadata.channels} Ch</span>}
+                  <span className="flex items-center"><span className="text-daw-primary mr-2">Ã°Å¸â€™Â¾</span>{formatFileSize(metadata?.fileSize || 0)}</span>
                 </div>
               </div>
               <button 

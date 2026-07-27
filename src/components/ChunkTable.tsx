@@ -6,7 +6,7 @@ import { useFFmpeg } from '../hooks/useFFmpeg';
 
 export const ChunkTable = () => {
   const { chunks, fileUrl, outputFormat } = useAudioStore();
-  const { isLoaded, isProcessing, progress, statusText, processChunk, processAndDownloadMultiple, downloadBlobLocal } = useFFmpeg();
+  const { isLoaded, isLoading, isProcessing, progress, statusText, loadError, load, processChunk, processAndDownloadMultiple, downloadBlobLocal } = useFFmpeg();
   
   const [playingChunk, setPlayingChunk] = useState<number | null>(null);
   const [selectedChunks, setSelectedChunks] = useState<Set<number>>(new Set());
@@ -107,7 +107,10 @@ export const ChunkTable = () => {
         
         <div className="flex space-x-3">
           {!isLoaded ? (
-            <span className="text-gray-400 text-sm flex items-center px-4 py-2 bg-black/20 rounded-lg">Loading FFmpeg...</span>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-400 flex items-center px-4 py-2 bg-black/20 rounded-lg">{isLoading ? 'Loading FFmpeg...' : loadError ? 'FFmpeg unavailable' : 'Preparing FFmpeg...'}</span>
+              {!isLoading && <button onClick={() => void load()} className="px-3 py-2 rounded-lg bg-cyan-500/20 text-cyan-300">Retry</button>}
+            </div>
           ) : (
             <>
               <button 

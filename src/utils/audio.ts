@@ -1,91 +1,55 @@
 import type { Chunk, RemainderOption } from '../types';
 
 export const formatTime = (seconds: number): string => {
-  if (isNaN(seconds) || seconds < 0) return '00:00.00';
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 100);
-
+  if (!Number.isFinite(seconds) || seconds < 0) return '00:00.00';
+  const centiseconds = Math.round(seconds * 100);
+  const hrs = Math.floor(centiseconds / 360000);
+  const mins = Math.floor((centiseconds % 360000) / 6000);
+  const secs = Math.floor((centiseconds % 6000) / 100);
+  const ms = centiseconds % 100;
   const formattedMins = hrs > 0 ? mins.toString().padStart(2, '0') : mins.toString();
   const formattedSecs = secs.toString().padStart(2, '0');
   const formattedMs = ms.toString().padStart(2, '0');
-
-  if (hrs > 0) {
-    return `${hrs}:${formattedMins}:${formattedSecs}.${formattedMs}`;
-  }
-  return `${formattedMins}:${formattedSecs}.${formattedMs}`;
+  return hrs > 0 ? `${hrs}:${formattedMins}:${formattedSecs}.${formattedMs}` : `${formattedMins}:${formattedSecs}.${formattedMs}`;
 };
 
 export const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 Bytes';
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + (sizes[i] ?? 'Bytes');
 };
 
 export const generateFileName = (originalName: string, index: number, extension: string): string => {
-  const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-  const paddedIndex = index.toString().padStart(3, '0');
-  return `${baseName}_${paddedIndex}.${extension}`;
+  const dot = originalName.lastIndexOf('.');
+  const baseName = (dot > 0 ? originalName.slice(0, dot) : originalName).replace(/[\\/:*?"<>|]+/g, '_');
+  return `${baseName}_${index.toString().padStart(3, '0')}.${extension}`;
 };
 
-export const downloadBlob = (blob: Blob, filename: string) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
-
-export const generateChunks = (
-  duration: number,
-  chunkLength: number,
-  offset: number,
-  remainderOption: RemainderOption
-): Chunk[] => {
-  if (duration <= 0 || chunkLength <= 0 || offset >= duration) return [];
-
+export const generateChunks = (duration: number, chunkLength: number, offset: number, remainderOption: RemainderOption): Chunk[] => {
+  if (![duration, chunkLength, offset].every(Number.isFinite) || duration <= 0 || chunkLength <= 0) return [];
+  const safeOffset = Math.max(0, Math.min(offset, duration));
+  if (safeOffset >= duration) return [];
+  const roundTime = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
   const chunks: Chunk[] = [];
-  let currentStart = offset;
+  let currentStart = safeOffset;
   let index = 1;
-
   while (currentStart < duration) {
-    let currentEnd = currentStart + chunkLength;
-    if (currentEnd > duration) {
-      currentEnd = duration;
-    }
-
-    const currentDuration = currentEnd - currentStart;
-    
-    // Check if this is the last chunk and it's a remainder
-    if (currentEnd === duration && currentDuration < chunkLength && currentStart > offset) {
-      if (remainderOption === 'discard') {
-        break; // Don't add this chunk
-      } else if (remainderOption === 'merge' && chunks.length > 0) {
-        // Merge into previous chunk
-        const prevChunk = chunks[chunks.length - 1];
-        prevChunk.end = currentEnd;
-        prevChunk.duration = prevChunk.end - prevChunk.start;
+    let currentEnd = roundTime(Math.min(currentStart + chunkLength, duration));
+    const currentDuration = roundTime(currentEnd - currentStart);
+    if (currentEnd === duration && currentDuration < chunkLength && currentStart > safeOffset) {
+      if (remainderOption === 'discard') break;
+      if (remainderOption === 'merge' && chunks.length > 0) {
+        const previous = chunks[chunks.length - 1];
+        previous.end = currentEnd;
+        previous.duration = roundTime(previous.end - previous.start);
         break;
       }
-      // 'keep' will just add it normally
     }
-
-    chunks.push({
-      index,
-      start: currentStart,
-      end: currentEnd,
-      duration: currentDuration,
-    });
-    
+    chunks.push({ index, start: roundTime(currentStart), end: currentEnd, duration: currentDuration });
     currentStart = currentEnd;
     index++;
   }
-
   return chunks;
 };

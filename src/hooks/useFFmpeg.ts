@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import JSZip from 'jszip';
@@ -6,190 +6,177 @@ import { useAudioStore } from '../store/useAudioStore';
 import { generateFileName } from '../utils/audio';
 import type { Chunk } from '../types';
 
+const CORE_CDNS = [
+  'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm',
+  'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm',
+];
+
+const toErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
 export const useFFmpeg = () => {
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
-  const ffmpegRef = useRef(new FFmpeg());
-  
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const loadPromiseRef = useRef<Promise<void> | null>(null);
+  const inputNameRef = useRef<string | null>(null);
   const { file, outputFormat, metadata } = useAudioStore();
 
-  const load = async () => {
-    if (isLoaded) return;
-    setStatusText('Loading FFmpeg...');
-    const ffmpeg = ffmpegRef.current;
-    
-    ffmpeg.on('progress', ({ progress }) => {
-      // Progress from ffmpeg is between 0 and 1
-      setProgress(progress * 100);
-    });
-
-    ffmpeg.on('log', ({ message }) => {
-      console.log('[FFmpeg]', message);
-    });
-
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-    setIsLoaded(true);
-    setStatusText('');
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const createFFmpeg = useCallback(() => {
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on('progress', ({ progress: value }) => setProgress(Math.max(0, Math.min(100, value * 100))));
+    ffmpeg.on('log', ({ message }) => console.debug('[FFmpeg]', message));
+    ffmpegRef.current = ffmpeg;
+    return ffmpeg;
   }, []);
 
-  const processChunk = async (chunk: Chunk): Promise<Blob> => {
-    if (!file || !metadata) throw new Error("No file");
-    const ffmpeg = ffmpegRef.current;
-    
-    setIsProcessing(true);
-    setStatusText(`Processing chunk ${chunk.index}...`);
-    setProgress(0);
-    
-    const inputName = 'input' + file.name.substring(file.name.lastIndexOf('.'));
-    const outputName = `output_${chunk.index}.${outputFormat}`;
-    
-    // We can reuse the uploaded file if we write it once, but to be safe we check if it exists
-    // actually, we will write it once per batch operation to save time, or here if not exists.
+  const load = useCallback(async () => {
+    if (isLoaded) return;
+    if (loadPromiseRef.current) return loadPromiseRef.current;
+
+    setIsLoading(true);
+    setLoadError(null);
+    setStatusText('Loading FFmpeg...');
+    const promise = (async () => {
+      for (const baseURL of CORE_CDNS) {
+        try {
+          const ffmpeg = createFFmpeg();
+          await ffmpeg.load({
+            coreURL: await toBlobURL(baseURL + '/ffmpeg-core.js', 'text/javascript'),
+            wasmURL: await toBlobURL(baseURL + '/ffmpeg-core.wasm', 'application/wasm'),
+          });
+          setIsLoaded(true);
+          setStatusText('');
+          return;
+        } catch (error) {
+          console.warn('FFmpeg core failed to load from', baseURL, error);
+          ffmpegRef.current = null;
+        }
+      }
+      throw new Error('KhÃƒÂ´ng thÃ¡Â»Æ’ tÃ¡ÂºÂ£i bÃ¡Â»â„¢ xÃ¡Â»Â­ lÃƒÂ½ FFmpeg. HÃƒÂ£y kiÃ¡Â»Æ’m tra mÃ¡ÂºÂ¡ng hoÃ¡ÂºÂ·c tÃ¡ÂºÂ¯t extension chÃ¡ÂºÂ·n CDN.');
+    })();
+
+    loadPromiseRef.current = promise;
     try {
+      await promise;
+    } catch (error) {
+      setLoadError(toErrorMessage(error));
+      setStatusText('');
+    } finally {
+      loadPromiseRef.current = null;
+      setIsLoading(false);
+    }
+  }, [createFFmpeg, isLoaded]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const ensureInput = async (ffmpeg: FFmpeg) => {
+    if (!file) throw new Error('No audio file selected');
+    const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.audio';
+    const inputName = 'input' + extension.toLowerCase();
+    if (inputNameRef.current !== inputName) {
+      if (inputNameRef.current) {
+        try { await ffmpeg.deleteFile(inputNameRef.current); } catch { /* already removed */ }
+      }
       await ffmpeg.writeFile(inputName, await fetchFile(file));
-    } catch(e) {
-      // ignore if already exists or handle
+      inputNameRef.current = inputName;
     }
-
-    const start = chunk.start.toString();
-    const duration = chunk.duration.toString();
-
-    let args = [
-      '-y',
-      '-i', inputName,
-      '-ss', start,
-      '-t', duration,
-    ];
-
-    if (outputFormat === 'mp3') {
-      args.push('-c:a', 'libmp3lame', '-q:a', '2');
-    } else {
-      // WAV PCM
-      args.push('-c:a', 'pcm_s16le');
-    }
-
-    args.push(outputName);
-
-    await ffmpeg.exec(args);
-
-    const data = await ffmpeg.readFile(outputName);
-    
-    // Clean up
-    await ffmpeg.deleteFile(outputName);
-    setIsProcessing(false);
-    setStatusText('');
-    
-    return new Blob([(data as any).buffer || data], { type: `audio/${outputFormat}` });
+    return inputName;
   };
 
-  const processAndDownloadMultiple = async (chunksToProcess: Chunk[], asZip: boolean) => {
-    if (!file || !metadata || chunksToProcess.length === 0) return;
-    setIsProcessing(true);
-    setStatusText('Preparing...');
-    setProgress(0);
-    
+  const makeArgs = (inputName: string, chunk: Chunk, outputName: string) => [
+    '-hide_banner', '-loglevel', 'error', '-y',
+    '-i', inputName,
+    '-map', '0:a:0', '-vn', '-sn', '-dn',
+    '-ss', chunk.start.toFixed(6),
+    '-t', chunk.duration.toFixed(6),
+    '-avoid_negative_ts', 'make_zero',
+    ...(outputFormat === 'mp3'
+      ? ['-c:a', 'libmp3lame', '-q:a', '2']
+      : ['-c:a', 'pcm_s16le']),
+    outputName,
+  ];
+
+  const readBlob = async (ffmpeg: FFmpeg, outputName: string) => {
+    const data = await ffmpeg.readFile(outputName);
+    const bytes = (data as Uint8Array).slice();
+    return new Blob([bytes.buffer], { type: outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/wav' });
+  };
+
+  const processChunk = async (chunk: Chunk): Promise<Blob> => {
+    if (!metadata) throw new Error('No audio metadata');
+    await load();
+    const ffmpeg = ffmpegRef.current;
+    if (!ffmpeg) throw new Error('FFmpeg is not available');
+
+    setIsProcessing(true); setProgress(0); setStatusText(`Processing chunk ${chunk.index}...`);
+    const outputName = `output_${chunk.index}.${outputFormat}`;
     try {
-      const ffmpeg = ffmpegRef.current;
-      const inputName = 'input' + file.name.substring(file.name.lastIndexOf('.'));
-      await ffmpeg.writeFile(inputName, await fetchFile(file));
-      
-      const blobs: { name: string; blob: Blob }[] = [];
-
-      for (let i = 0; i < chunksToProcess.length; i++) {
-        const chunk = chunksToProcess[i];
-        setStatusText(`Processing chunk ${chunk.index}/${chunksToProcess.length}`);
-        setProgress(0); // Reset for each chunk
-
-        const outputName = `output_${chunk.index}.${outputFormat}`;
-        const start = chunk.start.toString();
-        const duration = chunk.duration.toString();
-
-        let args = [
-          '-y',
-          '-i', inputName,
-          '-ss', start,
-          '-t', duration,
-        ];
-
-        if (outputFormat === 'mp3') {
-          args.push('-c:a', 'libmp3lame', '-q:a', '2');
-        } else {
-          args.push('-c:a', 'pcm_s16le');
-        }
-
-        args.push(outputName);
-        await ffmpeg.exec(args);
-
-        const data = await ffmpeg.readFile(outputName);
-        const chunkBlob = new Blob([(data as any).buffer || data], { type: `audio/${outputFormat}` });
-        const fileName = generateFileName(metadata.filename, chunk.index, outputFormat);
-        blobs.push({ name: fileName, blob: chunkBlob });
-        
-        // Clean up output file from ffmpeg memory
-        await ffmpeg.deleteFile(outputName);
-      }
-      
-      // Clean up input
-      await ffmpeg.deleteFile(inputName);
-
-      if (asZip) {
-        setStatusText('Creating ZIP...');
-        const zip = new JSZip();
-        blobs.forEach(b => zip.file(b.name, b.blob));
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        
-        const zipName = generateFileName(metadata.filename, 0, 'zip').replace('_000', '');
-        downloadBlobLocal(zipBlob, zipName);
-      } else {
-        setStatusText('Downloading...');
-        blobs.forEach(b => downloadBlobLocal(b.blob, b.name));
-      }
-      
-      setStatusText('Done!');
-      setTimeout(() => setStatusText(''), 3000);
-    } catch (err) {
-      console.error(err);
-      setStatusText('An error occurred during processing.');
+      const inputName = await ensureInput(ffmpeg);
+      await ffmpeg.exec(makeArgs(inputName, chunk, outputName));
+      return await readBlob(ffmpeg, outputName);
     } finally {
-      setIsProcessing(false);
-      setProgress(0);
+      try { await ffmpeg.deleteFile(outputName); } catch { /* best effort */ }
+      setIsProcessing(false); setStatusText('');
     }
   };
 
   const downloadBlobLocal = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    // Execute click synchronously to preserve user-interaction context
-    a.click();
-    document.body.removeChild(a);
-    
-    // Revoke URL after a delay to ensure mobile browsers finish initiating the download
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 2000);
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = filename;
+    anchor.rel = 'noopener'; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
-  return {
-    isLoaded,
-    isProcessing,
-    progress,
-    statusText,
-    processChunk,
-    processAndDownloadMultiple,
-    downloadBlobLocal,
+  const processAndDownloadMultiple = async (chunksToProcess: Chunk[], asZip: boolean) => {
+    if (!file || !metadata || chunksToProcess.length === 0 || isProcessing) return;
+    await load();
+    const ffmpeg = ffmpegRef.current;
+    if (!ffmpeg) return;
+
+    setIsProcessing(true); setProgress(0); setStatusText('Preparing...');
+    const blobs: { name: string; blob: Blob }[] = [];
+    try {
+      const inputName = await ensureInput(ffmpeg);
+      for (let i = 0; i < chunksToProcess.length; i++) {
+        const chunk = chunksToProcess[i];
+        if (!chunk) continue;
+        setStatusText(`Processing chunk ${chunk.index} / ${chunksToProcess.length}`);
+        setProgress(0);
+        const outputName = `output_${chunk.index}.${outputFormat}`;
+        try {
+          await ffmpeg.exec(makeArgs(inputName, chunk, outputName));
+          const blob = await readBlob(ffmpeg, outputName);
+          blobs.push({ name: generateFileName(metadata.filename, chunk.index, outputFormat), blob });
+        } finally {
+          try { await ffmpeg.deleteFile(outputName); } catch { /* best effort */ }
+        }
+      }
+
+      if (asZip) {
+        setStatusText('Creating ZIP...');
+        const zip = new JSZip();
+        for (const item of blobs) zip.file(item.name, item.blob);
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+        downloadBlobLocal(zipBlob, generateFileName(metadata.filename, 0, 'zip').replace('_000', ''));
+      } else {
+        setStatusText('Downloading...');
+        for (const item of blobs) downloadBlobLocal(item.blob, item.name);
+      }
+      setStatusText('Done!');
+      window.setTimeout(() => setStatusText(''), 3000);
+    } catch (error) {
+      console.error(error);
+      setStatusText('Processing failed');
+      setLoadError(toErrorMessage(error));
+    } finally {
+      setIsProcessing(false); setProgress(0);
+    }
   };
+
+  return { isLoaded, isLoading, isProcessing, progress, statusText, loadError, load, processChunk, processAndDownloadMultiple, downloadBlobLocal };
 };

@@ -22,6 +22,11 @@ export const Waveform = ({ onReady }: WaveformProps) => {
   const [duration, setDuration] = useState(0);
   const [zoom, setZoom] = useState(10); // pixels per second
   const [isReady, setIsReady] = useState(false);
+  const zoomRef = useRef(zoom);
+  const onReadyRef = useRef(onReady);
+
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
   // Initialize wavesurfer
   useEffect(() => {
@@ -38,7 +43,7 @@ export const Waveform = ({ onReady }: WaveformProps) => {
       barRadius: 2,
       height: 128,
       normalize: true,
-      minPxPerSec: zoom,
+      minPxPerSec: zoomRef.current,
       plugins: [
         TimelinePlugin.create({
           container: timelineRef.current,
@@ -70,7 +75,7 @@ export const Waveform = ({ onReady }: WaveformProps) => {
       setDuration(dur);
       useAudioStore.getState().updateDuration(dur);
       setIsReady(true);
-      if (onReady) onReady();
+      if (onReadyRef.current) onReadyRef.current();
     });
 
     ws.on('audioprocess', (time) => {
