@@ -138,10 +138,9 @@ export const useFFmpeg = () => {
 
   const makeArgs = (inputName: string, chunk: Chunk, outputName: string) => [
     '-hide_banner', '-loglevel', 'error', '-y',
-    '-ss', chunk.start.toFixed(6),
-    '-accurate_seek',
     '-i', inputName,
     '-map', '0:a:0', '-vn', '-sn', '-dn',
+    '-ss', chunk.start.toFixed(6),
     '-t', chunk.duration.toFixed(6),
     '-avoid_negative_ts', 'make_zero',
     '-threads', '1',
