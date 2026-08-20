@@ -35,9 +35,9 @@ export const Waveform = ({ onReady }: WaveformProps) => {
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: '#06b6d4', // --color-daw-primary (Cyan)
-      progressColor: '#f59e0b', // --color-daw-accent
-      cursorColor: '#f59e0b',
+      waveColor: 'oklch(70% .17 42)',
+      progressColor: 'oklch(94% .012 80)',
+      cursorColor: 'oklch(94% .012 80)',
       barWidth: 2,
       barGap: 1,
       barRadius: 2,
@@ -52,7 +52,7 @@ export const Waveform = ({ onReady }: WaveformProps) => {
           primaryLabelInterval: 10,
           style: {
             fontSize: '10px',
-            color: '#9ca3af',
+            color: 'oklch(68% .018 65)',
           }
         }),
         HoverPlugin.create({

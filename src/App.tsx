@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { AudioLines, Clock3, FileAudio, HardDrive, Scissors, Type, X } from 'lucide-react';
 import { useAudioStore } from './store/useAudioStore';
 import { FileUploader } from './components/FileUploader';
 import { Waveform } from './components/Waveform';
@@ -5,88 +7,47 @@ import { ChunkSettings } from './components/ChunkSettings';
 import { ChunkTable } from './components/ChunkTable';
 import { ZwnjInjector } from './components/ZwnjInjector';
 import { formatFileSize, formatTime } from './utils/audio';
-import { Scissors, XCircle, Type, AudioLines, Clock3, HardDrive } from 'lucide-react';
-import { useState } from 'react';
 
 function App() {
   const { file, metadata, reset } = useAudioStore();
   const [activeTab, setActiveTab] = useState<'audio' | 'zwnj'>('audio');
 
   return (
-    <div className="min-h-screen flex flex-col p-6">
-      
-      <header className="mb-8 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
-            <Scissors size={24} />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Audio Chunker</h1>
-        </div>
-        
-        <div className="flex bg-black/20 p-1 rounded-xl border border-white/5">
-          <button 
-            onClick={() => setActiveTab('audio')}
-            className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'audio' ? 'bg-cyan-500 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <AudioLines size={16} className="mr-2" /> Audio Chunker
-          </button>
-          <button 
-            onClick={() => setActiveTab('zwnj')}
-            className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'zwnj' ? 'bg-cyan-500 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Type size={16} className="mr-2" /> ZWNJ Injector
-          </button>
-        </div>
+    <div className="app-shell">
+      <header className="site-header">
+        <a className="brand" href="/" aria-label="Audio Chunker home">
+          <span className="brand-mark"><Scissors size={18} strokeWidth={2.2} /></span>
+          <span>Audio Chunker</span>
+        </a>
+        <nav className="mode-switch" aria-label="Tool selection">
+          <button className={activeTab === 'audio' ? 'is-active' : ''} onClick={() => setActiveTab('audio')}><AudioLines size={16} /> Audio splitter</button>
+          <button className={activeTab === 'zwnj' ? 'is-active' : ''} onClick={() => setActiveTab('zwnj')}><Type size={16} /> ZWNJ tool</button>
+        </nav>
       </header>
 
-      <main className="flex-grow flex flex-col max-w-6xl w-full mx-auto">
+      <main className="main-content">
         {activeTab === 'audio' ? (
-          !file ? (
-            <div className="flex-grow flex items-center justify-center">
-              <FileUploader />
-            </div>
-          ) : (
-          <div className="flex flex-col animate-fade-in">
-            {/* File Info Header */}
-            <div className="flex justify-between items-end mb-6 glass-panel rounded-2xl p-6">
-              <div>
-                <h2 className="text-2xl font-semibold mb-2">{metadata?.filename}</h2>
-                <div className="flex space-x-6 text-sm font-mono text-gray-400">
-                  <span className="flex items-center"><Clock3 size={15} className="text-daw-primary mr-2" />Duration: {formatTime(metadata?.duration || 0)}</span>
-                  {metadata?.sampleRate && <span className="flex items-center">Sample rate: {metadata.sampleRate} Hz</span>}
-                  {metadata?.channels && <span className="flex items-center">Channels: {metadata.channels}</span>}
-                  <span className="flex items-center"><HardDrive size={15} className="text-daw-primary mr-2" />File size: {formatFileSize(metadata?.fileSize || 0)}</span>
+          file && metadata ? (
+            <div className="workspace animate-fade-in">
+              <div className="file-heading">
+                <div className="file-heading-main">
+                  <div className="file-icon"><FileAudio size={20} /></div>
+                  <div><p className="eyebrow">Source file</p><h1>{metadata.filename}</h1></div>
                 </div>
+                <button className="quiet-button" onClick={reset}><X size={16} /> Remove file</button>
               </div>
-              <button 
-                onClick={reset}
-                className="flex items-center space-x-2 text-sm font-medium text-gray-400 hover:text-red-400 transition-colors px-4 py-2 hover:bg-red-400/10 rounded-lg"
-              >
-                <XCircle size={18} />
-                <span>Close File</span>
-              </button>
+              <div className="metadata-row">
+                <span><Clock3 size={14} /> {formatTime(metadata.duration)}</span>
+                {metadata.sampleRate && <span>{metadata.sampleRate} Hz</span>}
+                {metadata.channels && <span>{metadata.channels} channel{metadata.channels > 1 ? 's' : ''}</span>}
+                <span><HardDrive size={14} /> {formatFileSize(metadata.fileSize)}</span>
+              </div>
+              <Waveform /><ChunkSettings /><ChunkTable />
             </div>
-
-            <Waveform />
-            
-            <div className="mt-6">
-              <ChunkSettings />
-              <ChunkTable />
-            </div>
-          </div>
-          )
-        ) : (
-          <ZwnjInjector />
-        )}
+          ) : <FileUploader />
+        ) : <ZwnjInjector />}
       </main>
-      
-      <footer className="mt-8 text-center text-xs text-gray-500 py-4 border-t border-daw-border">
-        Audio Chunker - Runs entirely in your browser using WebAssembly.
-      </footer>
+      <footer className="site-footer"><span>Private by design</span><span>Processing happens locally in your browser</span></footer>
     </div>
   );
 }
