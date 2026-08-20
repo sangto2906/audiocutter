@@ -11,11 +11,12 @@ import { formatFileSize, formatTime } from './utils/audio';
 function App() {
   const { file, metadata, reset } = useAudioStore();
   const [activeTab, setActiveTab] = useState<'audio' | 'zwnj'>('audio');
+  const homeHref = import.meta.env.BASE_URL;
 
   return (
     <div className="app-shell">
       <header className="site-header">
-        <a className="brand" href="/" aria-label="Audio Chunker home">
+        <a className="brand" href={homeHref} aria-label="Audio Chunker home">
           <span className="brand-mark"><Scissors size={18} strokeWidth={2.2} /></span>
           <span>Audio Chunker</span>
         </a>
